@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Menu, ShoppingBag, User, LogOut, Plus, Trash2, Edit, 
   CheckCircle, Truck, Utensils, X, ChevronRight, BarChart3, Home,
-  Leaf, Info, Loader2
+  Leaf, Info, Loader2, Calendar, Clock
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
@@ -69,7 +69,20 @@ const HeroSection = ({ onOrderNow }: { onOrderNow: () => void }) => (
       <p className="mt-3 text-base text-gray-300 sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-0 md:mt-5 md:text-xl">
         신선한 재료와 균형 잡힌 영양, 집밥 같은 정성을 담았습니다. 매일 새로운 도시락을 간편하게 주문해보세요.
       </p>
-      <div className="mt-5 sm:mt-8 sm:flex sm:justify-start">
+      
+      {/* Delivery Info Banner */}
+      <div className="mt-6 inline-flex flex-col sm:flex-row bg-black/40 backdrop-blur-sm rounded-lg p-4 text-white border border-white/20">
+        <div className="flex items-center mr-6 mb-2 sm:mb-0">
+          <Clock className="w-5 h-5 text-brand-500 mr-2" />
+          <span className="font-semibold mr-2">점심 배송:</span> 11:00 ~ 12:00
+        </div>
+        <div className="flex items-center">
+          <Clock className="w-5 h-5 text-brand-500 mr-2" />
+          <span className="font-semibold mr-2">저녁 배송:</span> 17:00 ~ 18:00
+        </div>
+      </div>
+
+      <div className="mt-8 sm:mt-10 sm:flex sm:justify-start">
         <div className="rounded-md shadow">
           <button
             onClick={onOrderNow}
@@ -309,11 +322,22 @@ const CheckoutModal = ({
 }: { 
   isOpen: boolean, 
   onClose: () => void, 
-  onSubmit: (details: { address: string, contact: string }) => void, 
+  onSubmit: (details: { address: string, contact: string, deliveryDate: string, deliveryTime: 'lunch' | 'dinner' }) => void, 
   total: number 
 }) => {
   const [address, setAddress] = useState('');
   const [contact, setContact] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [deliveryTime, setDeliveryTime] = useState<'lunch'|'dinner'>('lunch');
+
+  // Set default date to tomorrow
+  useEffect(() => {
+    if (isOpen) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      setDeliveryDate(tomorrow.toISOString().split('T')[0]);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -337,6 +361,31 @@ const CheckoutModal = ({
             </div>
           </div>
           <div className="mt-5 sm:mt-6 space-y-4">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+               <div>
+                 <label className="block text-sm font-medium text-gray-700">배송 희망일</label>
+                 <input 
+                   type="date" 
+                   required
+                   min={new Date().toISOString().split('T')[0]}
+                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                   value={deliveryDate}
+                   onChange={(e) => setDeliveryDate(e.target.value)}
+                 />
+               </div>
+               <div>
+                 <label className="block text-sm font-medium text-gray-700">배송 시간</label>
+                 <select
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
+                    value={deliveryTime}
+                    onChange={(e) => setDeliveryTime(e.target.value as 'lunch' | 'dinner')}
+                 >
+                   <option value="lunch">점심 (11:00 ~ 12:00)</option>
+                   <option value="dinner">저녁 (17:00 ~ 18:00)</option>
+                 </select>
+               </div>
+             </div>
+
              <div>
                <label className="block text-sm font-medium text-gray-700">배송지 주소</label>
                <input 
@@ -364,8 +413,8 @@ const CheckoutModal = ({
              <button
               type="button"
               className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-brand-600 text-base font-medium text-white hover:bg-brand-700 focus:outline-none sm:text-sm disabled:bg-gray-400"
-              onClick={() => onSubmit({ address, contact })}
-              disabled={!address || !contact}
+              onClick={() => onSubmit({ address, contact, deliveryDate, deliveryTime })}
+              disabled={!address || !contact || !deliveryDate}
             >
               주문 완료
             </button>
@@ -531,7 +580,12 @@ const AdminDashboard = ({ menus, orders, onAddMenu, onDeleteMenu, onUpdateStatus
                    <li key={order.id} className="p-6 hover:bg-gray-50">
                      <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-gray-500">주문번호 #{order.id.slice(-6)}</span>
-                        <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleString('ko-KR')}</span>
+                        <div className="flex items-center text-sm text-gray-500">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          <span className="mr-2">{order.deliveryDate}</span>
+                          <Clock className="w-3 h-3 mr-1" />
+                          <span>{order.deliveryTime === 'lunch' ? '점심' : '저녁'}</span>
+                        </div>
                      </div>
                      <div className="flex justify-between items-start">
                         <div>
@@ -704,8 +758,10 @@ const App = () => {
         msg = "다른 로그인 팝업이 이미 열려있습니다.";
       } else if (error.code === 'auth/popup-blocked') {
         msg = "팝업이 차단되었습니다. 브라우저 설정을 확인해주세요.";
+      } else if (error.code === 'auth/operation-not-allowed') {
+        msg = "구글 로그인이 활성화되지 않았습니다. Firebase Console에서 Google 로그인을 사용 설정해주세요.";
       } else if (error.code === 'auth/unauthorized-domain') {
-        msg = "승인되지 않은 도메인입니다. Firebase 콘솔에서 도메인을 추가해주세요.";
+        msg = "승인되지 않은 도메인입니다. Firebase Console에서 도메인을 추가해주세요.";
       } else if (error.message) {
         msg = `로그인 오류: ${error.message}`;
       }
@@ -749,7 +805,7 @@ const App = () => {
   };
 
   // Order Action
-  const handleCheckout = async ({ address, contact }: { address: string, contact: string }) => {
+  const handleCheckout = async ({ address, contact, deliveryDate, deliveryTime }: { address: string, contact: string, deliveryDate: string, deliveryTime: 'lunch' | 'dinner' }) => {
     if (!user) {
       setToast({ msg: "주문하려면 로그인이 필요합니다", type: 'error' });
       handleLogin();
@@ -766,6 +822,8 @@ const App = () => {
         status: 'pending',
         address,
         contact,
+        deliveryDate,
+        deliveryTime,
         createdAt: Date.now()
       };
 

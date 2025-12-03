@@ -22,6 +22,8 @@ export interface Order {
   status: 'pending' | 'preparing' | 'delivering' | 'completed' | 'cancelled';
   address: string;
   contact: string;
+  deliveryDate: string; // YYYY-MM-DD
+  deliveryTime: 'lunch' | 'dinner';
   createdAt: number; // Timestamp
 }
 
