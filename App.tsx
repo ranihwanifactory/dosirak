@@ -2,13 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Menu, ShoppingBag, User, LogOut, Plus, Trash2, Edit, 
   CheckCircle, Truck, Utensils, X, ChevronRight, BarChart3, Home,
-  Leaf, Info
+  Leaf, Info, Loader2
 } from 'lucide-react';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
   signOut,
-  User as FirebaseUser 
+  User as FirebaseUser,
+  AuthError
 } from 'firebase/auth';
 import { 
   collection, 
@@ -35,13 +36,16 @@ const formatCurrency = (amount: number) => {
 
 const Toast = ({ message, type, onClose }: { message: string, type: 'success' | 'error', onClose: () => void }) => {
   useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
+    const timer = setTimeout(onClose, 5000); // Increased duration for error reading
     return () => clearTimeout(timer);
   }, [onClose]);
 
   return (
-    <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 z-50 ${type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+    <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white transform transition-all duration-300 z-50 flex items-center ${type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
       {message}
+      <button onClick={onClose} className="ml-4 text-white hover:text-gray-200">
+        <X className="w-4 h-4" />
+      </button>
     </div>
   );
 };
@@ -639,10 +643,12 @@ const App = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [toast, setToast] = useState<{msg: string, type: 'success'|'error'} | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      console.log("Auth state changed:", firebaseUser?.email);
       if (firebaseUser) {
         setUser({
           uid: firebaseUser.uid,
@@ -682,10 +688,31 @@ const App = () => {
 
   // Auth Actions
   const handleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      setToast({ msg: "로그인 실패", type: 'error' });
+      // State updates via onAuthStateChanged
+    } catch (error: any) {
+      console.error("Login failed:", error);
+      let msg = "로그인에 실패했습니다.";
+      
+      // Known Firebase error codes
+      if (error.code === 'auth/popup-closed-by-user') {
+        msg = "로그인 창이 닫혔습니다.";
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        msg = "다른 로그인 팝업이 이미 열려있습니다.";
+      } else if (error.code === 'auth/popup-blocked') {
+        msg = "팝업이 차단되었습니다. 브라우저 설정을 확인해주세요.";
+      } else if (error.code === 'auth/unauthorized-domain') {
+        msg = "승인되지 않은 도메인입니다. Firebase 콘솔에서 도메인을 추가해주세요.";
+      } else if (error.message) {
+        msg = `로그인 오류: ${error.message}`;
+      }
+      
+      setToast({ msg, type: 'error' });
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -693,6 +720,7 @@ const App = () => {
     signOut(auth);
     setCart([]);
     setActivePage('home');
+    setToast({ msg: "로그아웃 되었습니다.", type: 'success' });
   };
 
   // Cart Actions
@@ -823,8 +851,13 @@ const App = () => {
                    </button>
                 </div>
               ) : (
-                <button onClick={handleLogin} className="text-sm font-medium text-brand-600 hover:text-brand-500">
-                  로그인
+                <button 
+                  onClick={handleLogin} 
+                  disabled={isLoggingIn}
+                  className="inline-flex items-center text-sm font-medium text-brand-600 hover:text-brand-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoggingIn && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {isLoggingIn ? '로그인 중...' : '로그인'}
                 </button>
               )}
             </div>
